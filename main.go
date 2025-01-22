@@ -10,6 +10,8 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
+var allowList = []string{"example.com", "example.org"}
+
 type NATSHTTPTransport struct {
 	nc          *nats.Conn
 	subjectReq  string
@@ -107,6 +109,23 @@ func startServer(nc *nats.Conn, subjectReq string) {
 		}
 		for key, value := range natsReq.Header {
 			httpReq.Header.Set(key, value)
+		}
+		// check that host header is for a allowed domain
+		if _, ok := httpReq.Header["Host"]; !ok {
+			nc.Publish(msg.Reply, []byte(`{"error": "missing host header"}`))
+			return
+		}
+		host := httpReq.Header.Get("Host")
+		allowed := false
+		for _, domain := range allowList {
+			if host == domain {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			nc.Publish(msg.Reply, []byte(`{"error": "host not allowed"}`))
+			return
 		}
 
 		client := &http.Client{}
